@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Syllabus Progress Tracker</title>
+  <style>
+:root{--green:#2e9e5b;--orange:#f08c1a;--red:#d64545;--bg:#f5f6fa;--card:#fff;--text:#222;--muted:#666}
+@media (prefers-color-scheme:dark){:root{--bg:#15171c;--card:#1f232b;--text:#eee;--muted:#9aa}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+main{max-width:820px;margin:0 auto;padding:24px 16px 60px}
+h1{margin:0 0 6px}
+.hint{color:var(--muted);font-size:.9rem}
+.chip{display:inline-block;padding:2px 8px;border-radius:999px;color:#fff;font-size:.78rem;margin-left:4px}
+.chip.green{background:var(--green)}.chip.orange{background:var(--orange)}.chip.red{background:var(--red)}
+.add-bar{display:flex;gap:8px;margin:16px 0}
+.add-bar input{flex:1}
+input[type=text],input[type=number]{padding:8px 10px;border:1px solid #8884;border-radius:8px;background:var(--card);color:var(--text);font-size:1rem}
+button{cursor:pointer;border:0;border-radius:8px;padding:8px 12px;background:#3b5bdb;color:#fff;font-size:.9rem}
+button:hover{opacity:.9}
+.tree,.tree ul{list-style:none;margin:0;padding:0}
+.tree ul{margin-left:22px;border-left:2px dashed #8885;padding-left:12px}
+.node{margin:8px 0}
+.row{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;border-left:8px solid var(--red);background:var(--card);box-shadow:0 1px 3px #0002;transition:background .2s,border-color .2s}
+.row.green{background:color-mix(in srgb,var(--green) 22%,var(--card));border-color:var(--green)}
+.row.orange{background:color-mix(in srgb,var(--orange) 22%,var(--card));border-color:var(--orange)}
+.row.red{background:color-mix(in srgb,var(--red) 22%,var(--card));border-color:var(--red)}
+.title{flex:1;font-weight:600}
+.depth0>.row .title{font-size:1.15rem}
+/* coloured box around each subject (top level) */
+.tree>li.node{--sc:#3b5bdb;border:3px solid var(--sc);border-radius:16px;padding:10px;margin:16px 0;background:color-mix(in srgb,var(--sc) 10%,var(--bg))}
+.pct{display:flex;align-items:center;gap:4px}
+.pct input{width:80px;text-align:right}
+.avg{font-weight:700;min-width:70px;text-align:right}
+.avg small{font-weight:400;color:var(--muted)}
+.actions{display:flex;gap:4px}
+.actions button{background:#8883;color:var(--text);padding:4px 8px;font-size:.8rem}
+.toggle{background:none;color:var(--text);padding:0 4px;font-size:1rem}
+.collapsed>ul{display:none}
+.sel{display:none;width:18px;height:18px;cursor:pointer;accent-color:#3b5bdb;flex:none}
+.row.selected{outline:3px solid #3b5bdb;outline-offset:1px}
+body.select-mode .sel{display:inline-block}
+.mode-bar{margin:-6px 0 10px}
+#selBar{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:20;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;background:var(--card);color:var(--text);box-shadow:0 6px 24px #0006;border:2px solid #3b5bdb;max-width:94vw}
+#selBar.show{display:flex}
+#selBar span{font-weight:600;white-space:nowrap}
+button.alt{background:#8883;color:var(--text)}
+dialog{width:min(640px,94vw);border:0;border-radius:14px;padding:20px;background:var(--card);color:var(--text);box-shadow:0 10px 40px #0006}
+dialog::backdrop{background:#0008}
+dialog h2{margin:0 0 6px}
+dialog textarea{width:100%;margin:6px 0;padding:8px;border:1px solid #8884;border-radius:8px;background:var(--bg);color:var(--text);font:.9rem/1.4 ui-monospace,Consolas,monospace}
+dialog input[type=text]{width:100%;margin:6px 0}
+.rep{display:block;margin:6px 0;font-size:.9rem}
+.dlg-btns{display:flex;gap:8px;margin-top:8px}
+</style>
+</head>
+<body>
+  <main>
+    <h1>Syllabus Progress Tracker</h1>
+    <p class="hint">Type the % completed in the box next to each lowest-level topic.
+      <span class="chip green">&ge; 80% green</span>
+      <span class="chip orange">50–&lt;80% orange</span>
+      <span class="chip red">&lt; 50% red</span>
+    </p>
+    <p class="hint">To group headings, press <b>Group headings under a common heading</b>, tick the headings you want, then press <b>Group under new heading</b>.</p>
+
+    <div class="add-bar">
+      <input id="newSubject" type="text" placeholder="New subject name…">
+      <button id="addSubject">+ Add subject</button>
+      <button id="openImport" class="alt">⬆ Import</button>
+      <button id="exportBtn" class="alt">⬇ Export</button>
+    </div>
+
+    <div class="mode-bar"><button id="modeBtn" class="alt">☑ Group headings under a common heading</button></div>
+
+    <ul id="tree" class="tree"></ul>
+    <div id="selBar"><span id="selCount"></span><button id="groupBtn">Group under new heading</button><button id="clearSel" class="alt">Clear</button></div>
+
+    <dialog id="importDlg">
+      <h2>Import headings</h2>
+      <p class="hint"><b>Step 1.</b> Upload your syllabus image to any AI chat (Claude, ChatGPT, Gemini – free plans work) together with this prompt:</p>
+      <textarea id="aiPrompt" rows="6" readonly></textarea>
+      <button id="copyPrompt" class="alt">Copy prompt</button>
+      <p class="hint"><b>Step 2.</b> Type a subject name (optional). If you do, everything you paste goes under this subject. Leave it empty if your pasted outline already contains the subject names.</p>
+      <input id="importSubject" type="text" placeholder="Subject name (e.g. Mathematics)…">
+      <p class="hint"><b>Step 3.</b> Paste the AI's reply here (indented outline, numbered outline, or JSON):</p>
+      <textarea id="importText" rows="10" placeholder="Algebra&#10;  Linear equations&#10;  Quadratics&#10;Geometry"></textarea>
+      <label class="rep"><input type="checkbox" id="replaceAll"> Replace everything I already have</label>
+      <div class="dlg-btns">
+        <button id="doImport">Import</button>
+        <button id="closeImport" class="alt">Cancel</button>
+      </div>
+      <p id="importMsg" class="hint"></p>
+    </dialog>
+  </main>
+  <script>
+const KEY = 'progressTrackerData';
+let data = load();
+const tree = document.getElementById('tree');
+const selected = new Set();   // ids of ticked headings
+
+/* ---------- storage ---------- */
+function load() {
+  try { const d = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(d)) return d; } catch (e) {}
+  return [
+    { id: uid(), title: 'Mathematics', children: [
+      { id: uid(), title: 'Algebra', children: [
+        { id: uid(), title: 'Linear equations', children: [], value: 90 },
+        { id: uid(), title: 'Quadratics', children: [], value: 60 } ] },
+      { id: uid(), title: 'Geometry', children: [], value: 20 } ] }
+  ];
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} }
+function uid() { return Math.random().toString(36).slice(2, 10); }
+
+/* ---------- helpers ---------- */
+function findNode(list, id, parent = null) {
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].id === id) return { node: list[i], list, index: i, parent };
+    const r = findNode(list[i].children, id, list[i]);
+    if (r) return r;
+  }
+  return null;
+}
+// % of a node: leaf = typed value (default 0); parent = average of its children
+function percent(n) {
+  if (!n.children.length) return Number(n.value) || 0;
+  return n.children.reduce((s, c) => s + percent(c), 0) / n.children.length;
+}
+function colorFor(p) { return p >= 80 ? 'green' : p >= 50 ? 'orange' : 'red'; }
+
+/* ---------- render ---------- */
+// Box colours for subjects (kept different from the green/orange/red progress colours)
+const SUBJECT_COLORS = ['#3b5bdb', '#9c36b5', '#0c8599', '#c2255c', '#7048e8', '#1c7ed6', '#868e96', '#a0522d'];
+function assignSubjectColors() {
+  let changed = false;
+  data.forEach((n, i) => {
+    if (n.color) return;
+    const used = data.map(d => d.color).filter(Boolean);
+    n.color = SUBJECT_COLORS.find(c => !used.includes(c)) || SUBJECT_COLORS[i % SUBJECT_COLORS.length];
+    changed = true;
+  });
+  if (changed) save();
+}
+function render() {
+  assignSubjectColors();
+  tree.innerHTML = '';
+  [...selected].forEach(id => { if (!findNode(data, id)) selected.delete(id); });
+  data.forEach(n => tree.appendChild(buildNode(n, 0)));
+  refresh();
+  updateSelBar();
+}
+function buildNode(n, depth) {
+  const li = document.createElement('li');
+  li.className = 'node depth' + Math.min(depth, 3);
+  li.dataset.id = n.id;
+  if (depth === 0 && n.color) li.style.setProperty('--sc', n.color);
+  const isLeaf = !n.children.length;
+
+  li.innerHTML = `
+    <div class="row red">
+      <input type="checkbox" class="sel" title="Select to group" ${selected.has(n.id) ? 'checked' : ''}>
+      ${isLeaf ? '' : '<button class="toggle" data-act="toggle" title="Collapse/expand">▾</button>'}
+      <span class="title"></span>
+      ${isLeaf
+        ? `<label class="pct"><input type="number" min="0" max="100" step="1" placeholder="0" value="${n.value ?? ''}"> %</label>`
+        : '<span class="avg"></span>'}
+      <span class="actions">
+        <button data-act="addsame" title="Add a heading at the same level, right below this one">+ Heading</button>
+        <button data-act="add" title="Add sub-heading">+ Sub</button>
+        <button data-act="rename" title="Rename">✎</button>
+        <button data-act="delete" title="Delete">🗑</button>
+      </span>
+    </div>`;
+  li.querySelector('.title').textContent = n.title;
+
+  if (!isLeaf) {
+    const ul = document.createElement('ul');
+    n.children.forEach(c => ul.appendChild(buildNode(c, depth + 1)));
+    li.appendChild(ul);
+  }
+  return li;
+}
+
+// Recolor rows & update averages without re-rendering (keeps input focus)
+function refresh() {
+  tree.querySelectorAll('li.node').forEach(li => {
+    const n = findNode(data, li.dataset.id).node;
+    const p = percent(n);
+    const row = li.querySelector(':scope > .row');
+    row.className = 'row ' + colorFor(p) + (selected.has(li.dataset.id) ? ' selected' : '');
+    const avg = row.querySelector('.avg');
+    if (avg) avg.innerHTML = `${p.toFixed(1)}% <small>avg</small>`;
+  });
+}
+
+/* ---------- events ---------- */
+tree.addEventListener('input', e => {
+  if (e.target.type !== 'number') return;
+  const id = e.target.closest('li').dataset.id;
+  let v = e.target.value === '' ? 0 : parseFloat(e.target.value);
+  v = Math.max(0, Math.min(100, isNaN(v) ? 0 : v));
+  findNode(data, id).node.value = v;
+  save(); refresh();
+});
+
+tree.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const li = btn.closest('li');
+  const { node, list, index } = findNode(data, li.dataset.id);
+  const act = btn.dataset.act;
+
+  if (act === 'toggle') { li.classList.toggle('collapsed'); btn.textContent = li.classList.contains('collapsed') ? '▸' : '▾'; return; }
+  if (act === 'add') {
+    const name = prompt('Sub-heading name:'); if (!name || !name.trim()) return;
+    node.children.push({ id: uid(), title: name.trim(), children: [], value: 0 });
+    delete node.value;            // it is now a parent; its % comes from children
+  }
+  if (act === 'addsame') {
+    const name = prompt('Heading name:'); if (!name || !name.trim()) return;
+    list.splice(index + 1, 0, { id: uid(), title: name.trim(), children: [], value: 0 });
+  }
+  if (act === 'rename') {
+    const name = prompt('New name:', node.title); if (!name || !name.trim()) return;
+    node.title = name.trim();
+  }
+  if (act === 'delete') {
+    if (!confirm(`Delete "${node.title}" and everything under it?`)) return;
+    list.splice(index, 1);
+  }
+  save(); render();
+});
+
+document.getElementById('addSubject').addEventListener('click', addSubject);
+document.getElementById('newSubject').addEventListener('keydown', e => { if (e.key === 'Enter') addSubject(); });
+function addSubject() {
+  const input = document.getElementById('newSubject');
+  const name = input.value.trim(); if (!name) return;
+  data.push({ id: uid(), title: name, children: [], value: 0 });
+  input.value = ''; save(); render();
+}
+
+/* ---------- select & group ---------- */
+let selectMode = false;
+function setMode(on) {
+  selectMode = on;
+  document.body.classList.toggle('select-mode', on);
+  if (!on) selected.clear();
+  render();
+}
+document.getElementById('modeBtn').onclick = () => setMode(!selectMode);
+function updateSelBar() {
+  document.getElementById('selCount').textContent = selected.size + ' selected';
+  document.getElementById('selBar').classList.toggle('show', selectMode);
+  document.getElementById('groupBtn').disabled = selected.size === 0;
+  document.getElementById('modeBtn').textContent = selectMode ? '✖ Cancel grouping' : '☑ Group headings under a common heading';
+}
+tree.addEventListener('change', e => {
+  if (!e.target.classList.contains('sel')) return;
+  const li = e.target.closest('li');
+  if (e.target.checked) selected.add(li.dataset.id); else selected.delete(li.dataset.id);
+  li.querySelector(':scope > .row').classList.toggle('selected', e.target.checked);
+  updateSelBar();
+});
+document.getElementById('clearSel').onclick = () => { selected.clear(); render(); };
+document.getElementById('groupBtn').onclick = groupSelected;
+
+// selected ids in on-screen order, skipping ones whose parent is also selected
+function topmostSelectedIds() {
+  const out = [];
+  tree.querySelectorAll('li.node').forEach(li => {
+    if (!selected.has(li.dataset.id)) return;
+    let a = li.parentElement.closest('li.node');
+    while (a) { if (selected.has(a.dataset.id)) return; a = a.parentElement.closest('li.node'); }
+    out.push(li.dataset.id);
+  });
+  return out;
+}
+function groupSelected() {
+  const ids = topmostSelectedIds();
+  if (!ids.length) return;
+  const name = prompt('Name of the new heading to group the ' + selected.size + ' selected box(es) under:');
+  if (!name || !name.trim()) return;
+  const group = { id: uid(), title: name.trim(), children: [] };
+  const first = findNode(data, ids[0]);
+  first.list.splice(first.index, 0, group);                 // new heading goes where the first selected one was
+  ids.forEach(id => {
+    const f = findNode(data, id);
+    f.list.splice(f.index, 1);
+    if (f.parent && !f.parent.children.length) f.parent.value = 0;
+    delete f.node.color;
+    group.children.push(f.node);
+  });
+  selected.clear();
+  save(); setMode(false);
+}
+
+/* ---------- import / export ---------- */
+const PROMPT = `Read this syllabus / table of contents image. Output ONLY a plain-text outline, with no explanation and no code block. Put one heading per line. Use 2 spaces of indentation for each level (subject = no indent, sub-heading = 2 spaces, sub-sub-heading = 4 spaces, and so on). Do not add bullets or numbering. Keep the original order.`;
+const dlg = document.getElementById('importDlg');
+document.getElementById('aiPrompt').value = PROMPT;
+document.getElementById('openImport').onclick = () => {
+  document.getElementById('importMsg').textContent = '';
+  // pre-fill the subject name with whatever is typed in the top bar
+  document.getElementById('importSubject').value = document.getElementById('newSubject').value.trim();
+  dlg.showModal();
+};
+document.getElementById('closeImport').onclick = () => dlg.close();
+document.getElementById('copyPrompt').onclick = async e => {
+  try { await navigator.clipboard.writeText(PROMPT); e.target.textContent = 'Copied ✓'; }
+  catch (err) { document.getElementById('aiPrompt').select(); }
+};
+
+// Turn pasted text (JSON or outline) into the tracker's node structure
+function parseInput(text) {
+  text = text.trim();
+  if (!text) return [];
+  if (/^[\[{]/.test(text)) {                       // JSON
+    const j = JSON.parse(text.replace(/^```json|^```|```$/gm, ''));
+    const conv = x => typeof x === 'string'
+      ? { id: uid(), title: x, children: [], value: 0 }
+      : (() => { const kids = (x.children || x.subtopics || x.topics || []).map(conv);
+          return { id: uid(), title: String(x.title || x.name || 'Untitled'), children: kids, ...(kids.length ? {} : { value: Number(x.value) || 0 }) }; })();
+    return (Array.isArray(j) ? j : (j.subjects || j.children || [j])).map(conv);
+  }
+  // Outline text
+  const lines = text.replace(/```\w*/g, '').split(/\r?\n/).filter(l => l.trim());
+  const numRe = /^(\d+(?:\.\d+)*)[.)]?\s+/;
+  const indents = lines.map(l => l.match(/^[ \t]*/)[0].replace(/\t/g, '  ').length);
+  const useIndent = indents.some(i => i > 0);
+  const roots = [], stack = [];                     // stack of {depthKey, node}
+  lines.forEach((raw, i) => {
+    let t = raw.trim().replace(/^[-*•–]\s+/, '');
+    let key = indents[i];
+    const m = t.match(numRe);
+    if (m) { if (!useIndent) key = m[1].split('.').length - 1; t = t.replace(numRe, ''); }
+    const node = { id: uid(), title: t.trim(), children: [], value: 0 };
+    while (stack.length && stack[stack.length - 1].key >= key) stack.pop();
+    if (stack.length) { const par = stack[stack.length - 1].node; par.children.push(node); delete par.value; }
+    else roots.push(node);
+    stack.push({ key, node });
+  });
+  return roots;
+}
+
+document.getElementById('doImport').onclick = () => {
+  const msg = document.getElementById('importMsg');
+  try {
+    let nodes = parseInput(document.getElementById('importText').value);
+    if (!nodes.length) { msg.textContent = 'Nothing to import – paste the AI output first.'; return; }
+
+    // If a subject name was typed, put everything pasted under that subject
+    const subjectName = document.getElementById('importSubject').value.trim();
+    if (subjectName) {
+      nodes = [{ id: uid(), title: subjectName, children: nodes }];
+    }
+
+    data = document.getElementById('replaceAll').checked ? nodes : data.concat(nodes);
+    save(); render();
+    document.getElementById('importText').value = '';
+    document.getElementById('importSubject').value = '';
+    document.getElementById('newSubject').value = '';
+    dlg.close();
+  } catch (err) { msg.textContent = 'Could not read that text: ' + err.message; }
+};
+
+document.getElementById('exportBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  a.download = 'progress-backup.json';
+  a.click();
+};
+
+render();
+</script>
+</body>
+</html>
